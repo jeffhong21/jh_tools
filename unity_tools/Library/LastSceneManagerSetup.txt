@@ -1,0 +1,4 @@
+sceneSetups:
+- path: Assets/Scenes/CopyComponents/CopyComponents.unity
+  isLoaded: 1
+  isActive: 1
