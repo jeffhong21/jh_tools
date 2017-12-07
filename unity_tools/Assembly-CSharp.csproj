@@ -51,8 +51,10 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+     <Compile Include="Assets\Characters\Impling\CustomComponent.cs" />
      <Compile Include="Assets\Tools\CopyComponents\ComponentToAdd.cs" />
      <Compile Include="Assets\Tools\CopyComponents\ComponentToCopy.cs" />
+     <Compile Include="Assets\Tools\CopyComponents\ComponentUtility.cs" />
      <Compile Include="Assets\Tools\ParticleToolbox\ParticleToolbox.cs" />
      <Compile Include="Assets\Tools\ReorderComponents\LevelData.cs" />
      <Compile Include="Assets\Tools\ReorderComponents\MobWave.cs" />

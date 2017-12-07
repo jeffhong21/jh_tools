@@ -34,13 +34,13 @@ namespace CopyComponents
             component = _component;
             componentName = component.GetType().ToString();
 
-            SetFieldAttr(component.GetType());
+            SetFieldAttr(component);
         }
 
 
-        public void SetFieldAttr(Type componentType)
+        public void SetFieldAttr(Component componentType)
         {
-            fieldsToCopy = componentType.GetFields(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+            fieldsToCopy = componentType.GetType().GetFields(BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
         }
 
 

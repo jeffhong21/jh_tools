@@ -1,6 +1,5 @@
 ﻿using System.Collections.Generic;
 using System.Reflection;
-using System.Linq;
 using System;
 using UnityEngine;
 using UnityEditor;
@@ -32,7 +31,7 @@ namespace CopyComponents
         //  List of all the target objects
         private List<GameObject> m_TargetObjects = new List<GameObject>();
 
-        private CopyOptions m_CopyOptions = CopyOptions.AllComponents;
+        private CopyOptions m_CopyOptions = CopyOptions.OnlyNew;
         private bool m_AllComponents = true;
 
         //  List of componets to add and values to copy.
@@ -59,18 +58,6 @@ namespace CopyComponents
 
         }
 
-        // private void OnEnable()
-        // {
-        //     //  This update callback is called 30 times per second in the editor.  Basically its
-        //     //  an Update() function you can use at edit time.
-        //     EditorApplication.update -= UpdateComponentList;
-        //     EditorApplication.update += UpdateComponentList;
-        // }
-
-        // private void OnDisable()
-        // {
-        //     EditorApplication.update -= UpdateComponentList;
-        // }
 
         private void OnGUI()
         {
@@ -148,30 +135,26 @@ namespace CopyComponents
             EditorGUILayout.BeginHorizontal();
             if (GUILayout.Button(" + ", new GUILayoutOption[] { GUILayout.Height(buttonGUIHeight) }))
             {
-                Debug.Log("Add " + Selection.activeGameObject + " target objects");
+                //Debug.Log("Add " + Selection.activeGameObject + " target objects");
                 AddTargetObjects();
             }
 
             if (GUILayout.Button(" - ", new GUILayoutOption[] { GUILayout.Height(buttonGUIHeight) }))
             {
-                Debug.Log("Remove " + Selection.activeGameObject + " from target objects list");
+                //Debug.Log("Remove " + Selection.activeGameObject + " from target objects list");
                 RemoveTargetObjects();
             }
 
             if (GUILayout.Button("Clear Objects", new GUILayoutOption[] { GUILayout.Height(buttonGUIHeight) }))
             {
+                //Debug.Log("Clear All Objects");
                 ClearTargetObjects();
-                Debug.Log("Clear All Objects");
-
             }
 
             EditorGUILayout.EndHorizontal();
 
-
-
             //  -- END OBJECT SELECTION PANEL
             EditorGUILayout.EndVertical();
-
         }
 
         //  -- THE BUTTONS
@@ -200,9 +183,7 @@ namespace CopyComponents
                 }
             }
 
-
             EditorGUILayout.EndVertical();
-
         }
 
 
@@ -222,7 +203,6 @@ namespace CopyComponents
                         m_SourceObjComponents.Add(srcComponentToCopy);
                     }
 
-                
                 }
                 // Repaint();
             }
@@ -240,7 +220,6 @@ namespace CopyComponents
                 // bool isCopy = GUILayout.Toggle(componentsToCopy[index].IsCopyComponent, componentName);
                 componentsToCopy[index].IsCopyComponent = GUILayout.Toggle(componentsToCopy[index].IsCopyComponent, componentName);
             }
-
         }
 
 
@@ -314,40 +293,73 @@ namespace CopyComponents
             {
                 List<ComponentToAdd> targetComponentsToAdd = m_TargetComponentsToAdd[target];
 
-
                 //  Add components.
                 for(int i = 0; i < targetComponentsToAdd.Count; i ++)
                 {
                     Component componentToAdd = targetComponentsToAdd[i].Component;
                     FieldInfo[] fieldAttrs = targetComponentsToAdd[i].FieldAttrs;
-                    Component newComponent = target.AddComponent(componentToAdd.GetType());
 
-                    if (fieldAttrs.Length > 0)
+                    switch(m_CopyOptions)
                     {
-                        //  Add values to newly added component.
-                        foreach(FieldInfo field in fieldAttrs)
-                        {
-                            //  If you are using private serialized variables.  Remove if something goes wrong.
-                            if(field.IsPublic || field.GetCustomAttributes(typeof(SerializeField),true).Length != 0)
-                            {
-                                //  Get the value from the component that was added.
-                                object value = field.GetValue(componentToAdd);
-                                //  Set the values of the newly added component.
-                                field.SetValue(newComponent, value);
-                            }
-                        }
+                        case CopyOptions.AllComponents:
+                            CopyAllComponents(target, componentToAdd, fieldAttrs);
+                            break;
+                        case CopyOptions.OnlyNew:
+                            CopyOnlyNew(target, componentToAdd, fieldAttrs);
+                            break;
+                        case CopyOptions.OnlyValues:
+                            CopyOnlyValues(componentToAdd, fieldAttrs);
+                            break;
                     }
-                    else
-                    {
-                        UnityEditorInternal.ComponentUtility.CopyComponent(componentToAdd);
-                        UnityEditorInternal.ComponentUtility.PasteComponentValues(newComponent);
-                    }
-
-
-
                 }
             }
         }
+
+
+        private void CopyAllComponents(GameObject target, Component componentToAdd, FieldInfo[] fieldAttrs)
+        {
+            //Component newComponent = target.AddComponent(componentToAdd.GetType());
+
+            UnityEditorInternal.ComponentUtility.CopyComponent(componentToAdd);
+            UnityEditorInternal.ComponentUtility.PasteComponentAsNew(target);
+            UnityEditorInternal.ComponentUtility.PasteComponentValues(componentToAdd);
+        }
+
+
+        private void CopyOnlyNew(GameObject target, Component componentToAdd, FieldInfo[] fieldAttrs)
+        {
+            UnityEditorInternal.ComponentUtility.CopyComponent(componentToAdd);
+            UnityEditorInternal.ComponentUtility.PasteComponentAsNew(target);
+            UnityEditorInternal.ComponentUtility.PasteComponentValues(componentToAdd);
+        }
+
+
+        private void CopyOnlyValues(Component componentToAdd, FieldInfo[] fieldAttrs)
+        {
+            UnityEditorInternal.ComponentUtility.CopyComponent(componentToAdd);
+            UnityEditorInternal.ComponentUtility.PasteComponentValues(componentToAdd);
+        }
+
+
+        private void SetFieldAttr(Component componentToAdd, Component newComponent, FieldInfo[] fieldAttrs)
+        {
+            if (fieldAttrs.Length > 0)
+            {
+                //  Add values to newly added component.
+                foreach(FieldInfo field in fieldAttrs)
+                {
+                    //  If you are using private serialized variables.  Remove if something goes wrong.
+                    if(field.IsPublic || field.GetCustomAttributes(typeof(SerializeField),true).Length != 0)
+                    {
+                        //  Get the value from the component that was added.
+                        object value = field.GetValue(componentToAdd);
+                        //  Set the values of the newly added component.
+                        field.SetValue(newComponent, value);
+                    }
+                }
+            }
+        }
+
 
 
         //  Get all checked components and put into list.  ComponentToAdd class will get all values.
@@ -361,11 +373,13 @@ namespace CopyComponents
                     {
                         //  Component from the source object
                         Component srcComponentToAdd = componentsToCopy[k].Component;
-                        // if(srcComponentToAdd.GetType().ToString() == "ParticleSystem"){
-                        //     continue;
-                        // }
+                        
+                        if(srcComponentToAdd.GetType() == typeof(ParticleSystem)){
+                            continue;
+                        }
+
                         ComponentToAdd componentToAdd = new ComponentToAdd(srcComponentToAdd);
-                        componentToAdd.SetFieldAttr(srcComponentToAdd.GetType());
+                        componentToAdd.SetFieldAttr(srcComponentToAdd);
                         componentsToAdd.Add(componentToAdd);
                     }
                 }
@@ -375,52 +389,63 @@ namespace CopyComponents
 
 
         //  Returns a dictionary of target gameObjects and its componentsToCopy.
-        private Dictionary<GameObject, List<ComponentToAdd>> GetListOfComponentsToCopyForTarget(List<GameObject> targetObjects, List<ComponentToAdd> sourceComponentsToAdd)
+        private Dictionary<GameObject, List<ComponentToAdd>> GetListOfComponentsToCopyForTarget(List<GameObject> targetObjects, List<ComponentToAdd> srcComponentsToAdd)
         {
             Dictionary<GameObject, List<ComponentToAdd>> targetComponentsToAdd = new Dictionary<GameObject, List<ComponentToAdd>>();
-            List<ComponentToAdd> componentsToAdd = sourceComponentsToAdd;
+            List<ComponentToAdd> componentsToAdd = new List<ComponentToAdd>();
 
-            //  Loop through each target object and get each target objects components.
-            for (int i = 0; i < targetObjects.Count; i++ )
+            //  Loop through each target object and check if target contains components from src target.
+            foreach(GameObject target in targetObjects)
             {
-                GameObject target = targetObjects[i];
-
-                //  Temporary hack way to be able to check if any of the targets components are in componentsToAdd (components to add to target).
-                //  Instead of comparing the component, I'm comparing component.GetType() cause it returns the components name.
-                Component[] _targetComponents = target.GetComponents<Component>();          //  Temporary array to hold the targets components.
-                Type[] targetComponents = new Type[target.GetComponents<Component>().Length];
-
-                for (int k = 0; k < target.GetComponents<Component>().Length; k ++)
+                //  Loop through each srcComponentsToAdd
+                foreach(ComponentToAdd srcComponent in srcComponentsToAdd)
                 {
-                    targetComponents[k] = _targetComponents[k].GetType();
-                    // Debug.Log("Target components: " + targetComponents[k]);
-                }
-
-                if (m_CopyOptions == CopyOptions.OnlyNew || m_CopyOptions == CopyOptions.OnlyValues)
-                {
-                    //  Loop through list of componentsToCopy and check if target object contains that component.
-                    for(int k = 0; k < componentsToAdd.Count; k ++)
+                    if (m_CopyOptions == CopyOptions.OnlyNew || m_CopyOptions == CopyOptions.OnlyValues)
                     {
-                        //  Check if target contains the a component that is to be added.
-                        if(targetComponents.Contains(componentsToAdd[k].Component.GetType()) )     // Using System.Linq Contain Method to check if source component is in targetComponents array.
+                        //  If target contains a component from srcComponentsToAdd, add it.
+                        if(DoesTargetContainComponent(target, srcComponent.Component) == false)
                         {
-                            //Debug.Log(string.Format("{0} contains the components:  {1}.  Removing",target, componentsToAdd[k].Component.GetType().ToString() ));
-                            //  Remove from list of components to add to target.
-                            componentsToAdd.Remove(componentsToAdd[k]);
+                            componentsToAdd.Add(srcComponent);
                         }
                     }
+                    else{
+                        componentsToAdd.Add(srcComponent);
+                    }
+
+
                 }
-
-                //  Prints all the targets components.
-                PrintComponentList( "List of Targets components", targetComponents);
-                //  Prints all the components that need to be added to target.
-                PrintComponentList( "List of Components to add to Target", componentsToAdd);
-
-                //  Add target and its list of componentsToAdd.
                 targetComponentsToAdd.Add(target, componentsToAdd);
             }
+
+            //  Prints all the components that need to be added to target.
+            // PrintComponentList( "List of Components to add to Target", componentsToAdd);
+            
             return targetComponentsToAdd;
         }
+
+        //  -- Checks if target contains the specified component.
+        private bool DoesTargetContainComponent(GameObject target, Component componentType)
+        {
+            Component[] targetComponents = target.GetComponents(typeof(Component));
+
+            foreach(Component targetComponent in targetComponents)
+            {
+                if (componentType.GetType() == targetComponent.GetType())
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+
+
+
+
+
+
+
 
 
         private void PrintComponentList(string header, List<ComponentToAdd> list)
@@ -453,93 +478,14 @@ namespace CopyComponents
 
         private void DebugMessage()
         {
-            // if (m_SourceObject != null)
-            // {
-                
-            //     //  Add all checked components into a new list and get their values.
-            //     m_ComponentToAdd = GetAllComponentsToCopy(m_SourceObject, m_SourceObjComponents);
-            //     //  Get List of targets and the components to add to each target.
-            //     m_TargetComponentsToAdd = GetListOfComponentsToCopyForTarget(m_TargetObjects, m_ComponentToAdd);
 
-            //     //  Loop through each target and add components.
-            //     foreach(GameObject target in m_TargetObjects)
-            //     {
-            //         ComponentToAdd[] targetComponentsToAdd = m_TargetComponentsToAdd[target].ToArray();
+            // Debug.Log("Source Components: " + m_SourceObjComponents.Count);
+            // Debug.Log("Components To Add: " + m_ComponentToAdd.Count);
 
-            //         string componentInfo = string.Format("Target Name:  {0}\n", target);
-
-            //         Debug.Log(m_TargetComponentsToAdd[target].Count);
-            //         //  Add components.
-            //         // for(int i = 0; i < targetComponentsToAdd.Length; i ++)
-            //         // {
-            //         //     Component componentToAdd = targetComponentsToAdd[i].Component;
-            //         //     FieldInfo[] fieldAttrs = targetComponentsToAdd[i].FieldAttrs;
-
-            //         //     componentInfo += componentToAdd.GetType().ToString() + "\n";
-            //         // }
-
-
-            //         Debug.Log(componentInfo);
-            //     }
-
-            // }
-
-            // SourceObjComponents();
-
-            Debug.Log("Source Components: " + m_SourceObjComponents.Count);
-            Debug.Log("Components To Add: " + m_ComponentToAdd.Count);
-
-
+            foreach(ComponentToAdd c in GetAllComponentsToCopy(m_SourceObject, m_SourceObjComponents) ){
+                Debug.Log(c.ComponentName);
+            }
         }
-
-
-        // private void SourceObjComponents()
-        // {
-        //     string info = "Componets:\n";
-        //     if (m_SourceObject != null)
-        //     {
-        //         //  -- Go through the source object list of components.
-        //         for (int index = 0; index < m_SourceObject.GetComponents<Component>().Length; index++)
-        //         {
-        //             //  -- Check to see if list contains the component.  Otherwise it will keep on adding.
-        //             Component srcComponent = m_SourceObject.GetComponents<Component>()[index];
-        //             ComponentToCopy srcComponentToCopy = new ComponentToCopy(true, srcComponent);
-
-        //             if (m_SourceObjComponents.Contains(srcComponentToCopy) == false)
-        //             {
-        //                 m_SourceObjComponents.Add(srcComponentToCopy);
-        //                 info += srcComponentToCopy.ComponentName.ToString() + "\n";
-        //             }
-        //         }
-        //     }
-
-
-        //     Debug.Log(info);
-        //     Debug.Log(m_SourceObjComponents.Count);
-
-
-
-        // }
-
-
-        // private void _UpdateComponentList()
-        // {
-        //     if (m_SourceObject != null)
-        //     {
-        //         //  -- Go through the source object list of components.
-        //         for (int index = 0; index < m_SourceObject.GetComponents<Component>().Length; index++)
-        //         {
-        //             //  -- Check to see if list contains the component.  Otherwise it will keep on adding.
-        //             Component srcComponent = m_SourceObject.GetComponents<Component>()[index];
-        //             ComponentToCopy srcComponentToCopy = new ComponentToCopy(true, srcComponent);
-
-        //             if (m_SourceObjComponents.Contains(srcComponentToCopy) == false)
-        //             {
-        //                 m_SourceObjComponents.Add(srcComponentToCopy);
-        //             }
-        //         }
-        //     }
-        // }
 
 
 
