@@ -12,14 +12,11 @@ namespace JH_Tools
 	{
 
 		private GameObject m_Selection;
-
-        private IList m_ComponentList;
-        private IList m_CurrentComponents;
-
+        //  Base IList of Components to compare CurrentComponents too.
+        private IList m_ComponentList = new List<Component>();
+         // Get IList of current Component order to compare againt base ComponentList before OnReorderCallback is called.
+        private IList m_CurrentComponents = new List<Component>();
 		private ReorderableList m_List;
-
-		
-		// private List<Component> m_SortedComponents;
 
 
 		#region Window
@@ -50,28 +47,46 @@ namespace JH_Tools
                 return;
             }
 
-            m_ComponentList = new List<Component>();
+            InitializeReorderableList();
+		}
+
+
+        #region ReorderableList
+        //  -- Setup the lists of components.
+        private void InitializeReorderableList()
+        {
+            m_Selection = ReturnSelection();
+            //  Update the ILists with the GameObjects list of components.
             UpdateReorderableList(m_ComponentList, GetComponentList(m_Selection));
-
-
-            m_List = new ReorderableList(m_ComponentList, typeof(Component), true, true, false, false);
-            DrawHeaderelement();
-
-            // Get IList of current Component Order.
-            m_CurrentComponents = new List<Component>();
             UpdateReorderableList(m_CurrentComponents, GetComponentList(m_Selection));
 
+            DrawReorderableList();
+            OnReorderCallback();
+        }
+
+
+        //  -- Create the ReorderableList
+        private void DrawReorderableList()
+        {
+            m_List = new ReorderableList(m_ComponentList, typeof(Component), true, true, false, false);
+
+            m_List.drawHeaderCallback = (Rect rect) => {  
+                EditorGUI.LabelField(rect, string.Format("List Of Components for {0}", m_Selection.name ) ) ;
+            };
+        }
+
+
+        //  --  Move the Components when an item is moved in the Reorderable List.
+        private void OnReorderCallback()
+        {
             m_List.onReorderCallback = (ReorderableList list) => {
 
                 SortComponents(m_CurrentComponents, m_ComponentList);
 
                 UpdateReorderableList(m_ComponentList, GetComponentList(m_Selection));
                 UpdateReorderableList(m_CurrentComponents, GetComponentList(m_Selection));
-
-
             };
-		}
-
+        }
 
         
         private void SortComponents(IList CurrentComponents, IList SortedComponents)
@@ -95,33 +110,19 @@ namespace JH_Tools
                 }
             }
         }
-        
-        private void PrintListOfComponents(string header, List<Component> components)
-        {   
-            string list = header + "\n";
-            foreach(Component c in components)
-            {
-                list += c + "\n";
-            }
-            Debug.Log(list);
-        }
-
-        private void PrintListOfComponents(string header, IList components)
-        {   
-            string list = header + "\n";
-            for(int i = 0; i < components.Count; i++)
-            {
-                list += components[i] + "\n";
-            }
-            Debug.Log(list);
-        }
+        #endregion
 
 
-        private void DrawHeaderelement()
+        //  -- Unity Method.  Is used when selection has been changed.
+        private void OnSelectionChange()
         {
-            m_List.drawHeaderCallback = (Rect rect) => {  
-                EditorGUI.LabelField(rect, string.Format("List Of Components for {0}", m_Selection.name ) ) ;
-            };
+            if(ReturnSelection() != null){
+                //Debug.Log(string.Format("{0} is selected.", ReturnSelection().name ) );
+                InitializeReorderableList();
+            }
+            // else{
+            //     Debug.Log("New Selection");
+            // }
         }
 
 
@@ -129,13 +130,14 @@ namespace JH_Tools
         {
             if (ReturnSelection() != null)
             {
-                if (m_List == null)
+                if (m_List == null || m_List.list == null)
                 {
-                    Debug.LogError("ReorderableList is null");
-                }
-                else if (m_List.list == null)
-                {
-                    Debug.LogError("ReorderableList points to a null list");
+                    try{
+                        InitializeReorderableList();
+                    }
+                    catch{
+                        DebugReorderableListNull();
+                    }
                 }
                 else
                 {
@@ -143,24 +145,19 @@ namespace JH_Tools
                     EditorGUILayout.BeginVertical(new GUIStyle("HelpBox"), GUILayout.Height(windowMinSize.y));
 
                     if(ReturnSelection() != null){
-                        //  Update List List.
-                        //UpdateReorderableList(GetComponentList(m_Selection));
-                        //UpdateReorderableList();
-
                         GUILayout.Label(string.Format("Object currently selected is: {0}", ReturnSelection().name));
                     }
 
                     GUILayout.Space( 5 );
 
-                    if (m_List != null){
+                    if (m_List != null && m_List.list != null){
                         m_List.DoLayoutList();
                     }
 
                     GUILayout.Space( 5 );
 
                     if(ReturnSelection() != null){
-                        //EditorGUILayout.HelpBox(DisplayComponentList(m_ComponentList), MessageType.Info);
-                        EditorGUILayout.HelpBox(DisplayComponentList(m_ComponentList), MessageType.Info);
+                        EditorGUILayout.HelpBox(DisplayListOfComponents(m_ComponentList), MessageType.Info);
                     }
 
                     EditorGUILayout.EndVertical();
@@ -213,19 +210,7 @@ namespace JH_Tools
 		}
 
 
-
-
-		private string DisplayComponentList(Component[] cpnts)
-		{
-			string componentsString = "List of Components\n";
-			foreach(Component c in cpnts)
-			{
-				componentsString += c.GetType().ToString() + "\n";
-			}
-			return componentsString;
-		}
-
-		private string DisplayComponentList(IList cpnts)
+		private string DisplayListOfComponents(IList cpnts)
 		{
 			string componentsString = "List of Components\n";
 
@@ -236,6 +221,29 @@ namespace JH_Tools
 
 			return componentsString;
 		}
+
+        
+        private void PrintListOfComponents(string header, IList components)
+        {   
+            string list = header + "\n";
+            for(int i = 0; i < components.Count; i++)
+            {
+                list += components[i] + "\n";
+            }
+            Debug.Log(list);
+        }
+
+        private void DebugReorderableListNull()
+        {
+            if (m_List == null)
+            {
+                Debug.LogError("Either ReorderableList is null");
+            }
+            if (m_List.list == null)
+            {
+                Debug.LogError("ReorderableList points to a null list");
+            }
+        }
 
 
 	}
