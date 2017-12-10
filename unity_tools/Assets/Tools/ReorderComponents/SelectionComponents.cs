@@ -208,106 +208,104 @@
 #endregion
 
 
+//  using System;
+//  using System.Collections.Generic;
+//  using System.Linq;
+//  using UnityEngine;
+//  using UnityEditor;
+//  using UnityEngine.Networking;
+ 
+//  public class ComponentsSorter : ScriptableObject
+//  {
+//      private class ComponentComparer : IComparer<Component>
+//      {
+//         private Type[] TypesOrder;
 
-// using UnityEngine;
-// using UnityEditor;
-// using UnityEditorInternal;
-// using System.Collections.Generic;
- 
-// public class PrefabLibraryWindowMain : EditorWindow {
- 
-//     const int TOP_PADDING = 2;
-//     static Vector2 w_WindowMinSize = Vector2.one * 300.0f;
-//     static Rect w_HelpRect = new Rect(0.0f, 0.0f, 300.0f, 100.0f);
-//     static Rect w_ListRect = new Rect(Vector2.zero, w_WindowMinSize);
- 
-//     string Product = "Scene Doors";
-//     string Version = "1.5";
- 
-//     public int toolbarSelection = 0;
-//     public string[] toolbarStrings = new string[] {"Library", "Settings", "About"};
- 
-//     SerializedObject pl_Categories = null;
-//     ReorderableList pl_CategoriesList = null;
- 
-//     public IList<string> categoriesStrings;
- 
-//     Color headerColor = new Color(0.65f, 0.65f, 0.65f, 1);
-//     //Color backgroundColor = new Color(0.75f, 0.75f, 0.75f);
- 
-//     [MenuItem("Tools/Labyrith/Prefab Library")]
-//     public static void Init()
-//     {
-//         PrefabLibraryWindowMain window = EditorWindow.GetWindow<PrefabLibraryWindowMain>(false, "Prefab Library");
-//         window.minSize = w_WindowMinSize;
-//     }
- 
-//     private void OnEnable()
-//     {
-//         pl_CategoriesList = new ReorderableList(pl_Categories, categoriesStrings, true, true, true, true);
-//         pl_CategoriesList.drawHeaderCallback = (rect) => EditorGUILayout.LabelField("Categories");
-//         pl_CategoriesList.drawElementCallback = (Rect rect, int index, bool isActive, bool isFocused) =>
+//         public ComponentComparer(List<Component> Components)
 //         {
-//             rect.y += TOP_PADDING;
-//             rect.height = EditorGUIUtility.singleLineHeight;
-//             EditorGUI.PropertyField(rect, pl_CategoriesList.serializedProperty.GetArrayElementAtIndex(index));
-//         };
-//     }
- 
-//     void OnInspectorUpdate()
-//     {
-//         Repaint();
-//     }
- 
-//     void OnGUI()
-//     {
-//         EditorStyles.label.wordWrap = true;
- 
-//         GUI.skin.label.wordWrap = true;
- 
-//         if (!EditorGUIUtility.isProSkin)
-//         {
-//             headerColor = new Color(165 / 255f, 165 / 255f, 165 / 255f, 1);
+//             SetComponentOrder(Components);
 //         }
-//         else
+
+
+//         private void SetComponentOrder(List<Component> Components)
 //         {
-//             headerColor = new Color(41 / 255f, 41 / 255f, 41 / 255f, 1);
+//             TypesOrder = new Type[Components.Count];
+
+//             for(int i = 0; i < Components.Count; i ++)
+//             {
+//                 TypesOrder[i] = Components.GetType();
+//             }
+
 //         }
+
  
-//         toolbarSelection = GUILayout.Toolbar(toolbarSelection, toolbarStrings);
+//          private Int32 GetIndex(Component Component)
+//          {
+//              var Type = Component.GetType();
  
-//         if(toolbarSelection == 1)
+//              Type BestMatch = typeof(UnityEngine.Object);
+//              var BestIndex = Int32.MaxValue;
+//              for (int Index = 0; Index < TypesOrder.Length; Index++)
+//              {
+//                  // If we found the exact type in the list, then this is the right index.
+//                  var TypeOrder = TypesOrder[Index];
+//                  if (Type == TypeOrder)
+//                      return Index;
+ 
+//                  // If we found a parent, then we switch to its place if it is more
+//                  // "recent" (in the inheritance tree) than previously found parents.
+//                  if (Type.IsSubclassOf(TypeOrder))
+//                  {
+//                      if (TypeOrder.IsSubclassOf(BestMatch))
+//                      {
+//                          BestMatch = TypeOrder;
+//                          BestIndex = Index;
+//                      }
+//                  }
+//              }
+ 
+//              return BestIndex;
+//          }
+ 
+//          public int Compare(Component First, Component Second)
+//          {
+//              return Comparer<Int32>.Default.Compare(GetIndex(First), GetIndex(Second));
+//          }
+//      }
+ 
+
+
+//      [MenuItem("Edit/Sort Components %&a")]
+//      private static void SortComponents()
+//      {
+
+//         // -- Used before onReorderCallback to get the order of the selected objects current list of components order.
+//         var GameObject = Selection.activeGameObject;
+//         //  List of components before onReorderCallback.
+//         var CurrentComponents = GameObject.GetComponents<Component>().Where(Component => Component.GetType() != typeof (Transform)).ToList();
+    
+//         //  List of components after onReorderCallback.
+//         var SortedComponents = GameObject.GetComponents<Component>().Where(Component => Component.GetType() != typeof(Transform)).ToList();
+//         SortedComponents.Sort(new ComponentComparer(CurrentComponents));
+ 
+
+//         //  Used after onReorderCallback to arrange the components
+//         for (var Index = 0; Index < SortedComponents.Count; Index++)
 //         {
-//             EditorGUILayout.BeginHorizontal(); //Begin Whole Window
-//             EditorGUILayout.BeginVertical(GUILayout.Width(200)); //Begin Sidebar
-//             EditorGUILayout.BeginHorizontal(); //Begin Right
- 
-//             GUILayout.Label("About Scene Doors", EditorStyles.boldLabel);
- 
-//             pl_Categories.Update();
-//             pl_CategoriesList.DoList(w_ListRect);
-//             pl_Categories.ApplyModifiedProperties();
- 
-//             EditorGUILayout.EndHorizontal(); //End
+//             var SortedComponent = SortedComponents[Index];
+//             //var Components = GameObject.GetComponents<Component>().Where(Component => Component.GetType() != typeof (Transform)).ToList();
+//             var CurrentIndex = CurrentComponents.IndexOf(SortedComponent);
+            
+//             if (CurrentIndex < Index)
+//             {
+//                 for (var MoveIndex = CurrentIndex; MoveIndex < Index; MoveIndex++)
+//                     UnityEditorInternal.ComponentUtility.MoveComponentDown(SortedComponent);
+//             }
+//             else
+//             {
+//                 for (var MoveIndex = CurrentIndex; MoveIndex > Index; MoveIndex--)
+//                     UnityEditorInternal.ComponentUtility.MoveComponentUp(SortedComponent);
+//             }
 //         }
-//     }
- 
-//     public bool DrawHeaderTitle(string title, bool foldoutProperty, Color backgroundColor)
-//     {
- 
-//         GUILayout.Space(0);
- 
-//         GUI.Box(new Rect(1, GUILayoutUtility.GetLastRect().y + 4, position.width, 27), "");
-//         EditorGUI.DrawRect(new Rect(GUILayoutUtility.GetLastRect().x, GUILayoutUtility.GetLastRect().y + 5f, position.width + 1, 25f), headerColor);
-//         GUILayout.Space(4);
- 
-//         GUILayout.Label(title, EditorStyles.largeLabel);
-//         GUI.color = Color.clear;
-//         if (GUI.Button(new Rect(0, GUILayoutUtility.GetLastRect().y - 4, position.width, 27), ""))
-//         {
-//             foldoutProperty = !foldoutProperty;
-//         }
-//         GUI.color = Color.white;
-//         return foldoutProperty;
-//     }
-// }
+//      }
+//  }
