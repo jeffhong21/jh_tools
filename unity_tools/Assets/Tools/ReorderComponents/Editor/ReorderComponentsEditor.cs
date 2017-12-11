@@ -21,7 +21,7 @@ namespace JH_Tools
 
 		#region Window
 
-		private static Vector2 windowMinSize = new Vector2(300, 450);
+		private static Vector2 windowMinSize = new Vector2(250, 350);
 		private static Rect listRect = new Rect(Vector2.zero, windowMinSize);
 
 		[MenuItem("JH Tools/Reorder Components")]
@@ -29,7 +29,7 @@ namespace JH_Tools
 		{
 			ReorderComponentsEditor window = (ReorderComponentsEditor)GetWindow(typeof(ReorderComponentsEditor));
 			window.titleContent = new GUIContent("Reorder Components");
-			window.minSize = windowMinSize;
+			window.maxSize = window.minSize = windowMinSize;
 			window.Show();
 
 		}
@@ -61,6 +61,7 @@ namespace JH_Tools
             UpdateReorderableList(m_CurrentComponents, GetComponentList(m_Selection));
 
             DrawReorderableList();
+            DrawElementDrawer();
             OnReorderCallback();
         }
 
@@ -73,6 +74,41 @@ namespace JH_Tools
             m_List.drawHeaderCallback = (Rect rect) => {  
                 EditorGUI.LabelField(rect, string.Format("List Of Components for {0}", m_Selection.name ) ) ;
             };
+        }
+
+        private void DrawElementDrawer()
+        {
+            m_List.drawElementCallback =  (Rect rect, int index, bool isActive, bool isFocused) => {
+            
+            //Texture guiIcon = EditorGUIUtility.ObjectContent(null, typeof(Transform) ).image;
+            Texture componentIcon = EditorGUIUtility.ObjectContent(null, m_List.list[index].GetType() ).image;
+            Texture buttonIcon = EditorGUIUtility.IconContent("Toolbar Minus").image;
+            
+            
+
+            EditorGUI.Toggle(
+                new Rect(rect.x, rect.y, 20, EditorGUIUtility.singleLineHeight),
+                true
+            );
+
+            GUI.Label(
+                new Rect(rect.x + 20, rect.y, 20, EditorGUIUtility.singleLineHeight),
+                componentIcon
+                );
+
+            EditorGUI.LabelField(
+                new Rect(rect.x + 20 + 20, rect.y, rect.width - 60 - 20, EditorGUIUtility.singleLineHeight),
+                m_List.list[index].GetType().ToString()
+                );
+
+            
+            if( GUI.Button( new Rect(rect.x + rect.width - 25, rect.y + 2, 25, EditorGUIUtility.singleLineHeight + 2), buttonIcon ) ){
+                Debug.Log(string.Format("Deleting {0} Component", m_List.list[index].GetType().ToString() ) );
+            }
+
+            //EditorGUI.LabelField(rect,m_List.list[index].GetType().ToString());
+            };
+
         }
 
 
@@ -91,8 +127,6 @@ namespace JH_Tools
         
         private void SortComponents(IList CurrentComponents, IList SortedComponents)
         {
-            
-            //  Used after onReorderCallback to arrange the components
             for (int Index = 0; Index < SortedComponents.Count; Index++)
             {
                 Component SortedComponent = (Component)SortedComponents[Index];
@@ -145,7 +179,8 @@ namespace JH_Tools
                     EditorGUILayout.BeginVertical(new GUIStyle("HelpBox"), GUILayout.Height(windowMinSize.y));
 
                     if(ReturnSelection() != null){
-                        GUILayout.Label(string.Format("Object currently selected is: {0}", ReturnSelection().name));
+                        
+                        GUILayout.Label(string.Format("Object Currently Celected Is: {0}", ReturnSelection().name), EditorStyles.boldLabel);
                     }
 
                     GUILayout.Space( 5 );
@@ -156,12 +191,15 @@ namespace JH_Tools
 
                     GUILayout.Space( 5 );
 
-                    if(ReturnSelection() != null){
-                        EditorGUILayout.HelpBox(DisplayListOfComponents(m_ComponentList), MessageType.Info);
-                    }
-
+                    // if(ReturnSelection() != null){
+                    //     EditorGUILayout.HelpBox(DisplayListOfComponents(m_ComponentList), MessageType.Info);
+                    // }
                     EditorGUILayout.EndVertical();
                 }
+            }
+
+            else{
+                EditorGUILayout.HelpBox("No Object is Selected", MessageType.Info);
             }
             
         }
@@ -183,6 +221,7 @@ namespace JH_Tools
 			}
 		}
 
+
 		//  Get selected objects list of components.
 		private Component[] GetComponentList(GameObject go)
 		{
@@ -191,6 +230,7 @@ namespace JH_Tools
 		}
 
 
+        //  --  Used to update the list.  We make sure to clear it first so it doesn't keep adding.
 		private void UpdateReorderableList(IList list, Component[] cpnts)
 		{
             if (list != null)
@@ -200,16 +240,14 @@ namespace JH_Tools
                 {   
                     if(c.GetType() != typeof(Transform) )
                     {
-                        //string cpntName = c.GetType().ToString();
-                        //list.Add(cpntName);
                         list.Add(c);
                     }
                 }
-                // Repaint();
             }
 		}
 
 
+        //  Used to display list of compoents for a help box.
 		private string DisplayListOfComponents(IList cpnts)
 		{
 			string componentsString = "List of Components\n";
@@ -222,7 +260,8 @@ namespace JH_Tools
 			return componentsString;
 		}
 
-        
+
+        //  -- Used to Debug list contents
         private void PrintListOfComponents(string header, IList components)
         {   
             string list = header + "\n";
@@ -233,6 +272,8 @@ namespace JH_Tools
             Debug.Log(list);
         }
 
+
+        //  -- Used to show which list is null.
         private void DebugReorderableListNull()
         {
             if (m_List == null)
