@@ -4,13 +4,14 @@ using UnityEditorInternal;
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 
-namespace JH_Tools
+namespace ComponentTool
 {
-	public class ReorderComponentsEditor : EditorWindow
+    // [CustomEditor(typeof(GameObject))]
+	public class ComponentToolPanel : Editor
 	{
-
+        const string gameObjectInspectorTypeName = "UnityEditor.GameObjectInspector, UnityEditor";
+        
 		private GameObject m_Selection;
         //  Base IList of Components to compare CurrentComponents too.
         private IList m_ComponentList = new List<Component>();
@@ -19,36 +20,92 @@ namespace JH_Tools
 		private ReorderableList m_List;
 
 
-		#region Window
-
-		private static Vector2 windowMinSize = new Vector2(250, 350);
-		private static Rect listRect = new Rect(Vector2.zero, windowMinSize);
-
-		[MenuItem("JH Tools/Reorder Components")]
-		private static void OpenWindow()
-		{
-			ReorderComponentsEditor window = (ReorderComponentsEditor)GetWindow(typeof(ReorderComponentsEditor));
-			window.titleContent = new GUIContent("Reorder Components");
-			window.maxSize = window.minSize = windowMinSize;
-			window.Show();
-
-		}
 
 
+        private bool showComponentToolPanel = true;
+        private Editor m_DefaultEditor;
+        //  "UnityEditor.GameObjectInspector, UnityEditor" is a custom internal script that draws the GameObjects Inspector.
+        private static Type type = Type.GetType("UnityEditor.GameObjectInspector, UnityEditor");
 
-		#endregion
+
+        void OnEnable(){
+            m_DefaultEditor = Editor.CreateEditor(targets, Type.GetType(gameObjectInspectorTypeName));
+        }
 
 
-		private void OnEnable()
-		{
-            m_Selection = ReturnSelection();
+        // //  We need an empty OnIspectorGUI() else it'll print all the variables again in a list
+        // public override void OnInspectorGUI(){ }
 
-            if (m_Selection == null){
-                return;
+
+        //  We're overriding Unity's internal script GameObjectInspector.cs's OnHeaderGUI method.
+        protected override void OnHeaderGUI()
+        {
+            //  Creating a cache of the editor.
+            //CreateCachedEditor(targets, type, ref m_DefaultEditor);
+            //var gameObject = target as GameObject;
+
+            //  Draw the default Unity inspectorGUI.  Other wise it will be empty.
+            m_DefaultEditor.DrawHeader();
+
+            //  Custom GUI code here
+            
+            DrawLayout();
+
+            
+        }
+
+
+
+
+
+        private void DrawLayout()
+        {
+            EditorGUILayout.BeginVertical();
+
+            showComponentToolPanel = GUILayout.Toggle (showComponentToolPanel, new GUIContent("Component Tool Panel")  , new GUIStyle ("Foldout"));//ShurikenModuleTitle
+
+            if(showComponentToolPanel)
+            {
+                if (ReturnSelection() != null)
+                {
+                    if (m_List == null || m_List.list == null)
+                    {
+                        try{
+                            InitializeReorderableList();
+                        }
+                        catch{
+                            Debug.LogError("Either ReorderableList is null");
+                            //DebugReorderableListNull();
+                        }
+                    }
+                    else
+                    {
+                        GUILayout.Space( 5 );
+                        EditorGUILayout.BeginVertical(new GUIStyle("HelpBox") );
+
+                        if(ReturnSelection() != null){
+                            
+                            GUILayout.Label(string.Format("Object Currently Selected Is: {0}", ReturnSelection().name), EditorStyles.boldLabel);
+                        }
+
+                        GUILayout.Space( 5 );
+
+                        if (m_List != null && m_List.list != null){
+                            m_List.DoLayoutList();
+                        }
+
+                        GUILayout.Space( 5 );
+
+                        EditorGUILayout.EndVertical();
+                    }
+                }
+
+
+            EditorGUILayout.EndVertical();
             }
+        }
 
-            InitializeReorderableList();
-		}
+
 
 
         #region ReorderableList
@@ -79,14 +136,12 @@ namespace JH_Tools
         private void DrawElementDrawer()
         {
             m_List.drawElementCallback =  (Rect rect, int index, bool isActive, bool isFocused) => {
-            
-            //Texture guiIcon = EditorGUIUtility.ObjectContent(null, typeof(Transform) ).image;
+
             Texture componentIcon = EditorGUIUtility.ObjectContent(null, m_List.list[index].GetType() ).image;
             Texture buttonIcon = EditorGUIUtility.IconContent("Toolbar Minus").image;
 
 
             GUI.Label(
-                //new Rect(rect.x + 20, rect.y, 20, EditorGUIUtility.singleLineHeight),
                 new Rect(rect.x, rect.y, 20, EditorGUIUtility.singleLineHeight),
                 componentIcon
                 );
@@ -95,10 +150,6 @@ namespace JH_Tools
                 new Rect(rect.x + 20, rect.y, rect.width - 60, EditorGUIUtility.singleLineHeight),
                 m_List.list[index].GetType().ToString()
                 );
-            
-            // if( GUI.Button( new Rect(rect.x + rect.width - 25, rect.y + 2, 25, EditorGUIUtility.singleLineHeight + 2), buttonIcon ) ){
-            //     Debug.Log(string.Format("Deleting {0} Component", m_List.list[index].GetType().ToString() ) );
-            // }
 
             };
 
@@ -137,8 +188,7 @@ namespace JH_Tools
                 }
             }
         }
-        #endregion
-
+        
 
         //  -- Unity Method.  Is used when selection has been changed.
         private void OnSelectionChange()
@@ -147,61 +197,15 @@ namespace JH_Tools
                 //Debug.Log(string.Format("{0} is selected.", ReturnSelection().name ) );
                 InitializeReorderableList();
             }
-            // else{
-            //     Debug.Log("New Selection");
-            // }
         }
-
-
-        private void OnGUI()
-        {
-            if (ReturnSelection() != null)
-            {
-                if (m_List == null || m_List.list == null)
-                {
-                    try{
-                        InitializeReorderableList();
-                    }
-                    catch{
-                        DebugReorderableListNull();
-                    }
-                }
-                else
-                {
-                    GUILayout.Space( 5 );
-                    EditorGUILayout.BeginVertical(new GUIStyle("HelpBox"), GUILayout.Height(windowMinSize.y));
-
-                    if(ReturnSelection() != null){
-                        
-                        GUILayout.Label(string.Format("Object Currently Selected Is: {0}", ReturnSelection().name), EditorStyles.boldLabel);
-                    }
-
-                    GUILayout.Space( 5 );
-
-                    if (m_List != null && m_List.list != null){
-                        m_List.DoLayoutList();
-                    }
-
-                    GUILayout.Space( 5 );
-
-                    // if(ReturnSelection() != null){
-                    //     EditorGUILayout.HelpBox(DisplayListOfComponents(m_ComponentList), MessageType.Info);
-                    // }
-                    EditorGUILayout.EndVertical();
-                }
-            }
-
-            else{
-                EditorGUILayout.HelpBox("No Object is Selected", MessageType.Info);
-            }
-            
-        }
+        
+        #endregion
 
 
 
 
 
-		//  Get selected object.
+
 		private GameObject ReturnSelection()
 		{
 			GameObject selection = Selection.activeGameObject;
@@ -240,49 +244,38 @@ namespace JH_Tools
 		}
 
 
-        //  Used to display list of compoents for a help box.
-		private string DisplayListOfComponents(IList cpnts)
-		{
-			string componentsString = "List of Components\n";
+        
 
-            for(int i = 0; i < cpnts.Count; i ++)
-            {
-                componentsString += cpnts[i].ToString() + "\n";
-            }
-
-			return componentsString;
+		/****************************************
+		 * GameObjectInspector Replication
+		 * **************************************/
+		public override void OnInspectorGUI(){
+			m_DefaultEditor.OnInspectorGUI();
+		}
+		public override void ReloadPreviewInstances(){
+			m_DefaultEditor.OnInspectorGUI();
+		}
+		public override bool HasPreviewGUI (){
+			return m_DefaultEditor.HasPreviewGUI();
+		}
+		public override void OnPreviewSettings (){
+			m_DefaultEditor.OnPreviewSettings();
+		}
+		// public override Texture2D RenderStaticPreview (string assetPath, Object[] subAssets, int width, int height){
+		// 	return m_DefaultEditor.RenderStaticPreview(assetPath, subAssets, width, height);
+		// }
+		public override void OnPreviewGUI (Rect r, GUIStyle background){
+			m_DefaultEditor.OnPreviewGUI(r,background);
+		}
+		public void OnSceneDrag(SceneView sceneView){
+			m_DefaultEditor.GetType().GetMethod("OnSceneDrag").Invoke(m_DefaultEditor, new object[]{sceneView});
+		}
+		public void OnDestroy(){
+	 		m_DefaultEditor.GetType().GetMethod("OnDestroy").Invoke(m_DefaultEditor, null);  
 		}
 
 
-        //  -- Used to Debug list contents
-        private void PrintListOfComponents(string header, IList components)
-        {   
-            string list = header + "\n";
-            for(int i = 0; i < components.Count; i++)
-            {
-                list += components[i] + "\n";
-            }
-            Debug.Log(list);
-        }
-
-
-        //  -- Used to show which list is null.
-        private void DebugReorderableListNull()
-        {
-            if (m_List == null)
-            {
-                Debug.LogError("Either ReorderableList is null");
-            }
-            if (m_List.list == null)
-            {
-                Debug.LogError("ReorderableList points to a null list");
-            }
-        }
-
-
-	}
-
-
+    }    
 
 
 
@@ -419,31 +412,18 @@ namespace JH_Tools
             }
         }
 
-        public int Count
-        {
-            get
-            {
-                return _count;
-            }
+        public int Count{
+            get{return _count; }
         }
 
-        public bool IsSynchronized
-        {
-            get
-            {
-                return false;
-            }
+        public bool IsSynchronized{
+            get{return false; }
         }
 
         // Return the current instance since the underlying store is not
         // publicly available.
-        public object SyncRoot
-        {
-            get
-            {
-                return this;
-            }
-        }
+        public object SyncRoot{
+            get{return this; } }
 
         // IEnumerable Members
 
@@ -465,32 +445,6 @@ namespace JH_Tools
             Console.WriteLine();
         }
     }
-
-    // This code produces output similar to the following:
-    // Populate the List:
-    // List has a capacity of 8 and currently has 8 elements.
-    // List contents: one two three four five six seven eight
-    //
-    // Remove elements from the list:
-    // List has a capacity of 8 and currently has 6 elements.
-    // List contents: one two three four five seven
-    //
-    // Add an element to the end of the list:
-    // List has a capacity of 8 and currently has 7 elements.
-    // List contents: one two three four five seven nine
-    //
-    // Insert an element into the middle of the list:
-    // List has a capacity of 8 and currently has 8 elements.
-    // List contents: one two three four number five seven nine
-    //
-    // Check for specific elements in the list:
-    // List contains "three": True
-    // List contains "ten": False
     #endregion
 
-
 }
-
-
-
-
