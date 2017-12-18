@@ -2,6 +2,7 @@
 using UnityEngine;
 using System;
 using System.Collections.Generic;
+using System.Linq;
  
 namespace JH_Tools
 {
@@ -43,25 +44,53 @@ namespace JH_Tools
 
 		static void HierarchyWindowItemOnGUI (int instanceID, Rect selectionRect)
 		{
-
 			UnityEngine.Object obj = EditorUtility.InstanceIDToObject(instanceID);
 			if (obj == false)
 				return;
-
 			GameObject go = EditorUtility.InstanceIDToObject (instanceID) as GameObject;
-
-			//  Icon
 			Rect rect = new Rect (selectionRect); 
+
+			//  - NEEDS ATTENTION.  DUCT TAPED TOGETHER.
+			//  Highlight GameObject
+			if(EditorPrefs.GetInt(go.GetInstanceID() + "Highlight") == 1){
+				GUIStyle style = new GUIStyle(); 
+				style.normal.textColor = Color.black;
+
+				Rect highlightRect = new Rect (selectionRect); 
+				highlightRect.x = 1;
+				highlightRect.width = EditorGUIUtility.currentViewWidth - 4;
+				highlightRect.height = EditorGUIUtility.singleLineHeight;
+
+				Color oldColor = GUI.color;
+				GUI.color = Color.magenta;
+				EditorGUI.LabelField(highlightRect, GUIContent.none, EditorStyles.helpBox );
+				GUI.color = oldColor;
+				highlightRect.x = selectionRect.x;
+				highlightRect.y = selectionRect.y + 1.5f;
+				EditorGUI.LabelField(highlightRect,new GUIContent(go.name) , style);
+			}
+
+
+			//  -- Icon 
 			rect.x = 2;
 			rect.width = rect.height = 18;
 
 			var components = go.GetComponents<Component>();
-			
 			if(components != null){
 				//  If game object has more than transform
 				if(components.Length > 1){
+					//  See if a gameobject contains a certain type from componentTypes.
+					Type type = null;;
+					foreach(Component c in components){
+						if(componentTypes.Contains(c.GetType() ) ){
+							type = c.GetType();
+							continue;
+						}
+					}
+					if(type == null){
+						type = components[1].GetType();
+					}
 					
-					Type type = components[1].GetType();
 					Texture icon = AssetPreview.GetMiniTypeThumbnail(type);
 					bool isInComponentTypesList = Array.Exists(componentTypes, x => x == type);
 
@@ -81,7 +110,7 @@ namespace JH_Tools
 						GUI.Label(rect, new GUIContent(AssetPreview.GetMiniTypeThumbnail(typeof(GameObject) ) ) );  
 					}
 				}
-				//  If game object is empty object.
+				//  If object is empty object.
 				else{
 					if(CanShowAsPrefab(go)){
 						GUI.Label(rect, EditorGUIUtility.IconContent("PrefabNormal Icon"));
@@ -92,7 +121,10 @@ namespace JH_Tools
 				}
 			}
 
-			//  Warning Icon if something is missing.
+
+
+
+			//  -- Warning Icon if something is missing. ** Need to add a way to check for missing dependencies.
 			if (IsDisconnectedPrefabInstance(go) && IsRootTransform(go)){
 				rect.x = EditorGUIUtility.labelWidth + EditorGUIUtility.currentViewWidth / 15;
 				rect.y -= 2;
@@ -102,7 +134,7 @@ namespace JH_Tools
 
 
 
-			//  Set the Enable/Disable of the gameobject to GUI Toggle.
+			//  -- Set the Enable/Disable of the gameobject to GUI Toggle.
 			rect.x = EditorGUIUtility.currentViewWidth - 28;
 			rect.y = selectionRect.y;
 			rect.width = rect.height = 18;
@@ -127,9 +159,17 @@ namespace JH_Tools
 			}
 
 
+			//  - NEEDS ATTENTION.
+			//  --  Special component buttons (ParticleSystem, Audio, MeshRender)
+			// if(go.GetComponent<MeshRenderer>()){
+			// 	rect.x -= 15;
+			// 	Texture icon = AssetPreview.GetMiniTypeThumbnail(typeof(MeshRenderer));
+			// 	bool toggleMesh = GUI.Toggle(rect, go.GetComponent<MeshRenderer>().enabled, new GUIContent(icon));
+			// }
+
+
 			//  Markers
-			if(EditorPrefs.GetInt(go.GetInstanceID()+"G")==1){
-				GUI.color = Color.cyan;
+			if(EditorPrefs.GetInt(go.GetInstanceID() + "G") == 1){
 				rect.x -= 15;
 				GUI.Label(rect, "G");
 			}
@@ -150,7 +190,6 @@ namespace JH_Tools
 		static bool IsRootTransform(GameObject go){
 			return go.transform == go.transform.root;
 		}
-
 
 		static bool IsPartOfPrefab(GameObject prefab){
 			return PrefabUtility.GetPrefabParent(prefab) != null;
@@ -187,7 +226,9 @@ namespace JH_Tools
 
 
 
-		[MenuItem("GameObject/Marker/GameManager", false, 50)]
+
+
+		[MenuItem("GameObject/Marker/GameManager", false, 12)]
 		static void AddGameManagerMarker()
 		{
 			foreach(UnityEngine.Object o in Selection.gameObjects){
@@ -200,6 +241,18 @@ namespace JH_Tools
 			}
 		}
 
+		[MenuItem("GameObject/Highlight Object", false, 13)]
+		static void HighlightObject()
+		{
+			foreach(UnityEngine.Object o in Selection.gameObjects){
+				if(EditorPrefs.GetInt(o.GetInstanceID() + "Highlight") == 0){
+					EditorPrefs.SetInt(o.GetInstanceID() + "Highlight", 1);
+				}
+				else{
+					EditorPrefs.SetInt(o.GetInstanceID() + "Highlight", 0);
+				}
+			}
+		}
 
 
 

@@ -9,7 +9,7 @@ using System.Linq;
 
 namespace ComponentToolPanel
 {
-    [CustomEditor(typeof(GameObject))]
+    [CustomEditor(typeof(GameObject), true)]      
     [CanEditMultipleObjects]
 	public class ComponentToolPanel : Editor
 	{
@@ -93,9 +93,9 @@ namespace ComponentToolPanel
 		};
 		#endregion
 
+		GameObject[] m_GameObjects;
         Editor m_DefaultEditor;
         ReorderableList m_List;
-        GameObject m_GameObject;
         Transform m_Transform;
         List<Component> m_Components;
         bool m_Foldout;
@@ -106,14 +106,19 @@ namespace ComponentToolPanel
         void OnEnable(){
             m_DefaultEditor = Editor.CreateEditor(targets, Type.GetType(m_GameObjectInspectorTypeName));
             m_Components = new List<Component>();
+			m_GameObjects = new GameObject[targets.Length];
+			//m_List = new ReorderableList[targets.Length];
             m_Foldout = true;
-            InitializeList();
+			// for (int i = 0; i < targets.Length; i++){
+			// 	InitializeList(i);
+			// }
+			InitializeList(0);
         }
 
 
 		void OnDisable(){
 			//This avoids leaks
-            Debug.Log("Disabling Editor");
+            //Debug.Log("Disabling Editor");
 			DestroyImmediate(m_DefaultEditor); 
 		} 
 
@@ -122,60 +127,100 @@ namespace ComponentToolPanel
         protected override void OnHeaderGUI(){
             //  Draw the default Unity inspectorGUI.  Other wise it will be empty.
             m_DefaultEditor.DrawHeader();
+
+			// // -- Currently does not work because when the editor Disables which causes the selection order to reorder. --
+			// for(int i = 0; i < Selection.gameObjects.Length; i ++){
+			// 	m_GameObjects[i] = Selection.gameObjects[i];
+			// }
+
 			GUILayout.Space(2);
-
-
 
 			GUIStyle style = new GUIStyle(EditorStyles.foldout);
             style.fontStyle = FontStyle.Bold;
             style.fontSize = 12;
-            //  Custom GUI code here
-            m_Foldout = GUILayout.Toggle (m_Foldout, new GUIContent("Component Tool Panel")  , style); //ShurikenModuleTitle
-
-            if(m_Foldout){
-                m_List.DoLayoutList();
-            }
 
 
+			//  Custom GUI code here
+			m_Foldout = GUILayout.Toggle (m_Foldout, new GUIContent("Component Tool Panel : " + targets[0].name)  , style); //ShurikenModuleTitle
 
-            
+			if(m_Foldout){
+				//  Setting up the rect for the controls.
+				float height =m_List.elementHeight * m_Components.Count + m_List.headerHeight + 20; //  + m_GameObjects.Length * 12;   //20 = extra space for add button
+				if ( m_Components.Count == 0){
+					height +=m_List.elementHeight;
+				}
+				Rect rect = EditorGUILayout.GetControlRect(GUILayout.Height(height));
+				rect.x+=11;
+				rect.width-=11;
+
+				//  Draw List
+				m_List.DoList(rect);
+			}
+			
+
+
+
+			// // -- Currently does not work because when the editor Disables which causes the selection order to reorder. --
+			// //  Selected Objects.  
+			// if(m_Foldout && m_GameObjects.Length > 1){
+			// 	EditorGUILayout.BeginVertical();
+			// 	//  Need to setup rect for controls.  Otherwise it starts to spill over on top of the transform component
+			// 	float height = EditorGUIUtility.singleLineHeight * m_GameObjects.Length + 12; 
+			// 	Rect rect = EditorGUILayout.GetControlRect(GUILayout.Height(height));
+			// 	rect.y -= 12;
+			// 	EditorGUI.LabelField(rect, "Selected Objects");
+			// 	for(int i = 1; i < m_GameObjects.Length; i ++){
+			// 		rect.y += 20;//EditorGUIUtility.singleLineHeight;
+			// 		rect.height = 18;//EditorGUIUtility.singleLineHeight;
+			// 		rect.width = EditorGUIUtility.currentViewWidth / 2 - 4;
+			// 		Color oldColor = GUI.color;
+			// 		GUI.color = Color.grey;
+			// 		//EditorGUILayout.LabelField(GUIContent.none,EditorStyles.helpBox, GUILayout.Height(18), GUILayout.Width(50) );
+			// 		EditorGUI.LabelField(rect, GUIContent.none, EditorStyles.helpBox );
+			// 		GUI.color = oldColor;
+			// 		//rect = GUILayoutUtility.GetLastRect();
+			// 		EditorGUI.LabelField(rect,new GUIContent(m_GameObjects[i].name + string.Format(" : [ {0} ] ", i), EditorGUIUtility.ObjectContent(m_GameObjects[i], m_GameObjects[i].GetType()).image));
+			// 	}
+			// 	EditorGUILayout.EndVertical();
+			// }
+
         }
 
-
-        void InitializeList()
+		//  Initializes the reorderable list.
+        void InitializeList(int index)
         {
             //  Set inspector
-            m_GameObject = (GameObject)target;
-            m_Components = m_GameObject.GetComponents(typeof(Component)).ToList();
+            GameObject gameObject =  m_GameObjects[index] = (GameObject)targets[index];
+            m_Components = gameObject.GetComponents(typeof(Component)).ToList();
             //  Remove Transform component
             m_Components.RemoveAt(0);
             
             m_List = new ReorderableList(m_Components, typeof(Component), true, true, false, false);
 
             m_List.drawHeaderCallback = (Rect rect) => {
-                DrawElements(rect, m_GameObject.transform);
+                DrawElements(rect, gameObject.transform);
             };
 
-            m_List.drawElementCallback =  (Rect rect, int index, bool isActive, bool isFocused) => {
-                DrawElements(rect, m_Components[index]);
+            m_List.drawElementCallback =  (Rect rect, int _index, bool isActive, bool isFocused) => {
+                DrawElements(rect, m_Components[_index]);
             };
 
             //  What happens when the lists changes.
             m_List.onReorderCallback = (ReorderableList internalList) => {
 	   			//Move Down
 				for (int i = 0; i < m_Components.Count; i++){
-					int _index = internalList.list.IndexOf(m_Components[i]);
-					int difference = _index-i;
+					int listIndex = internalList.list.IndexOf(m_Components[i]);
+					int difference = listIndex - i;
 					if (difference>0)
 						for (int j = 0; j<Mathf.Abs(difference); j++)
 							ComponentUtility.MoveComponentDown(m_Components[i]);
 				}
 				//Move Up
-				m_Components = new List<Component>(m_GameObject.GetComponents<Component>());
+				m_Components = new List<Component>(gameObject.GetComponents<Component>());
 				m_Components.RemoveAt(0);
 				for (int i = m_Components.Count-1; i >=0;i--){
-					int _index = internalList.list.IndexOf(m_Components[i]);
-					int difference = _index-i;
+					int listIndex = internalList.list.IndexOf(m_Components[i]);
+					int difference = listIndex - i;
 					if (difference<0)
 						for (int j = 0; j<Mathf.Abs(difference); j++)
 							ComponentUtility.MoveComponentUp(m_Components[i]);
@@ -185,7 +230,7 @@ namespace ComponentToolPanel
 
         }
 
-
+		//  Draws what the list looks like.
         void DrawElements(Rect originalRect, Component component){
 
             Rect rect = new Rect(originalRect);
@@ -205,8 +250,6 @@ namespace ComponentToolPanel
             EditorGUI.LabelField(rect, new GUIContent(componentIcon) );
 
 
-
-
 			//Enable/Disable Toggle Handler
             rect.x += 25;
             rect.y += 2;
@@ -216,12 +259,11 @@ namespace ComponentToolPanel
 				if (oldValue != newValue){
 					Component[] _targets = GetTargetComponents(component, GetTargetComponentMode.AllowMultiComponent | GetTargetComponentMode.AllowMultiGameObject | GetTargetComponentMode.ExcludeDifferentTypes | GetTargetComponentMode.IncludeTransforms);
 					for (int i = 0; i < _targets.Length; i++){
-						Undo.RecordObject(_targets[i], (newValue?"Enable":"Disable ")+_targets[i].GetType().Name);
+						Undo.RecordObject(_targets[i], (newValue?"Enable" : "Disable ")+_targets[i].GetType().Name);
 						EditorUtility.SetObjectEnabled(_targets[i], newValue);
 					}
 				}
 			}
-
 
 
             //  Component name.
@@ -229,7 +271,6 @@ namespace ComponentToolPanel
             //rect.y = originalRect.y;
             rect.width = originalRect.width - 125;
             EditorGUI.LabelField(rect,component.GetType().ToString());
-
 
 
 
@@ -327,7 +368,7 @@ namespace ComponentToolPanel
 			bool multiGameObject = Event.current.shift && ((mode & GetTargetComponentMode.AllowMultiGameObject) == GetTargetComponentMode.AllowMultiGameObject);
 
 
-            // if (m_GameObject != mainTarget.gameObject && !multiGameObject)
+            // if (m_GameObjects != mainTarget.gameObject && !multiGameObject)
             //     return;
 
             // "<=" made on purpose in order to include Transforms if needed

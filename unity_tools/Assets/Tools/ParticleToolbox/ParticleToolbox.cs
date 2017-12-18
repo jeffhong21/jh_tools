@@ -45,7 +45,7 @@ public class ParticleToolbox : MonoBehaviour {
 
 
 
-	[MenuItem("GameObject/Custom ParticleSystem", false, -100)]
+	[MenuItem("GameObject/Custom ParticleSystem", false, 11)]
 	static void CreateParticleSystem(MenuCommand menuCommand){
 
 		GameObject particleSystem = new GameObject ("CustomParticleSystem");
