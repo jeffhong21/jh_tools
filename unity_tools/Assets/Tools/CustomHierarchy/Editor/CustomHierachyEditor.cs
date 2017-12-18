@@ -21,6 +21,7 @@ namespace JH_Tools
 			typeof(AudioSource),
 			typeof(Canvas),
 			typeof(CanvasGroup),
+			typeof(UnityEngine.EventSystems.EventSystem),
 			typeof(UnityEngine.UI.Image),
 			typeof(UnityEngine.UI.Button),
 			typeof(UnityEngine.UI.Text),
@@ -92,8 +93,8 @@ namespace JH_Tools
 			}
 
 			//  Warning Icon if something is missing.
-			if (IsDisconnectedPrefabInstance(go)){
-				rect.x = EditorGUIUtility.labelWidth + 8;
+			if (IsDisconnectedPrefabInstance(go) && IsRootTransform(go)){
+				rect.x = EditorGUIUtility.labelWidth + EditorGUIUtility.currentViewWidth / 15;
 				rect.y -= 2;
 				rect.width = rect.height = 24;
 				GUI.Label(rect, EditorGUIUtility.IconContent("console.warnicon.sml") );
@@ -144,6 +145,10 @@ namespace JH_Tools
 				if ( !allChildGOsForToggle.Contains(t.gameObject)) allChildGOsForToggle.Add(t.gameObject);
 				FetchAllChildGameObjects(t);
 			}
+		}
+
+		static bool IsRootTransform(GameObject go){
+			return go.transform == go.transform.root;
 		}
 
 

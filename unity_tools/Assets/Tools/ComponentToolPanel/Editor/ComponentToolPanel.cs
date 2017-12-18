@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using UnityEngine.UI;
 using UnityEditor;
 using UnityEditorInternal;
 using System;
@@ -9,11 +10,88 @@ using System.Linq;
 namespace ComponentToolPanel
 {
     [CustomEditor(typeof(GameObject))]
+    [CanEditMultipleObjects]
 	public class ComponentToolPanel : Editor
 	{
         //  "UnityEditor.GameObjectInspector, UnityEditor" is a custom internal script that draws the GameObjects Inspector.
         const string m_GameObjectInspectorTypeName = "UnityEditor.GameObjectInspector, UnityEditor";
 
+		#region Component Dependencies Dictionary
+        //  Some components come with other compoenets, so we need to delete components that com e with these com ponents.
+		static Dictionary<Type, List<Type>> componentDependencies = new Dictionary<Type, List<Type>>(){
+			{
+				typeof(Camera), new List<Type>(){
+					typeof(GUILayer), 
+					typeof(FlareLayer)
+				}
+			},
+			{
+				typeof(MeshRenderer), new List<Type>(){
+					typeof(TextMesh)
+				}
+			},
+			{
+				typeof(ParticleSystemRenderer), new List<Type>(){
+					typeof(ParticleSystem)
+				}
+			},
+			{
+				typeof(SkinnedMeshRenderer), new List<Type>(){
+					typeof(Cloth)
+				}
+			},
+			{
+				typeof(Rigidbody), new List<Type>(){
+					typeof(HingeJoint),
+					typeof(FixedJoint),
+					typeof(SpringJoint),
+					typeof(CharacterJoint),
+					typeof(ConfigurableJoint),
+					typeof(ConstantForce)
+				}
+			},
+			{
+				typeof(Rigidbody2D), new List<Type>(){
+	#if UNITY_5_3 || UNITY_5_4
+					typeof(FixedJoint2D),
+					typeof(RelativeJoint2D),
+					typeof(FrictionJoint2D),
+					typeof(TargetJoint2D),
+	#endif
+					typeof(DistanceJoint2D),
+					typeof(HingeJoint2D),
+					typeof(SliderJoint2D),
+					typeof(SpringJoint2D),
+					typeof(WheelJoint2D),
+					typeof(ConstantForce2D)
+				}
+			},
+			{
+				typeof(RectTransform), new List<Type>(){
+					typeof(Canvas)
+				}
+			},
+			{
+				typeof(Canvas), new List<Type>(){
+					typeof(CanvasScaler)
+				}
+			},   
+	#if UNITY_5_1 || UNITY_5_2 || UNITY_5_3 || UNITY_5_4
+			{
+				typeof(NetworkIdentity), new List<Type>(){
+					typeof(NetworkAnimator)
+				}
+			},
+	#endif
+			{
+				typeof(CanvasRenderer), new List<Type>(){
+					typeof(Text),
+					typeof(Image),
+					typeof(RawImage)
+				}
+			}
+		};
+		#endregion
 
         Editor m_DefaultEditor;
         ReorderableList m_List;
@@ -45,10 +123,13 @@ namespace ComponentToolPanel
             //  Draw the default Unity inspectorGUI.  Other wise it will be empty.
             m_DefaultEditor.DrawHeader();
 			GUILayout.Space(2);
-			GUIStyle style = new GUIStyle(EditorStyles.foldout);
-            
-            //  Custom GUI code here
 
+
+
+			GUIStyle style = new GUIStyle(EditorStyles.foldout);
+            style.fontStyle = FontStyle.Bold;
+            style.fontSize = 12;
+            //  Custom GUI code here
             m_Foldout = GUILayout.Toggle (m_Foldout, new GUIContent("Component Tool Panel")  , style); //ShurikenModuleTitle
 
             if(m_Foldout){
@@ -123,12 +204,24 @@ namespace ComponentToolPanel
             Texture componentIcon = EditorGUIUtility.ObjectContent(null,component.GetType() ).image;
             EditorGUI.LabelField(rect, new GUIContent(componentIcon) );
 
-            //  Enable toggle.
+
+
+
+			//Enable/Disable Toggle Handler
             rect.x += 25;
             rect.y += 2;
-            bool oldValue = true;
-            bool newValue = oldValue;
-            EditorGUI.Toggle(rect, newValue);
+            if(EditorUtility.GetObjectEnabled(component) > -1){
+				bool oldValue = EditorUtility.GetObjectEnabled(component)==1?true:false;
+				bool newValue = EditorGUI.Toggle(rect, oldValue);
+				if (oldValue != newValue){
+					Component[] _targets = GetTargetComponents(component, GetTargetComponentMode.AllowMultiComponent | GetTargetComponentMode.AllowMultiGameObject | GetTargetComponentMode.ExcludeDifferentTypes | GetTargetComponentMode.IncludeTransforms);
+					for (int i = 0; i < _targets.Length; i++){
+						Undo.RecordObject(_targets[i], (newValue?"Enable":"Disable ")+_targets[i].GetType().Name);
+						EditorUtility.SetObjectEnabled(_targets[i], newValue);
+					}
+				}
+			}
+
 
 
             //  Component name.
@@ -138,22 +231,134 @@ namespace ComponentToolPanel
             EditorGUI.LabelField(rect,component.GetType().ToString());
 
 
+
+
+			//Remove Button
             if ( ! isTransform || isRectTransform){
-                //  Delete Button.
                 rect.x = originalRect.width;
-                rect.y += 2;
+                rect.y += 1;
                 rect.width = rect.height = 16;
                 Texture buttonIcon = EditorGUIUtility.IconContent("TL Close button act").image;
                 if (GUI.Button(rect, new GUIContent(buttonIcon), GUIStyle.none) ){
                     Debug.Log(string.Format("Deleting Component:  {0}", component.GetType().ToString() ) );
-                }
-            }
+
+					Component[] _targets = GetTargetComponents(component, GetTargetComponentMode.AllowMultiComponent | GetTargetComponentMode.AllowMultiGameObject | GetTargetComponentMode.ExcludeDifferentTypes);
+					for (int i = 0; i < _targets.Length; i++){
+						string dependants = GetComponentDependants(_targets[i]);
+						if (dependants == string.Empty){
+							Undo.SetCurrentGroupName("Remove "+_targets[i].GetType().Name);
+							Undo.DestroyObjectImmediate(_targets[i]);
+						}
+						else
+							EditorUtility.DisplayDialog("Can't remove component", "Can't remove "+ _targets[i].GetType().Name+" because "+dependants+" depends on it","Ok");
+					}
+					EditorGUIUtility.ExitGUI();
+				}
+				if (isRectTransform)
+					rect.y+=2;
+			}
+			if (isTransform)
+				rect.y-=1;
 
 
         }
 
 
+
+
+
+
+		/****************************************
+		 * Utilities
+		 * **************************************/
+
+		//Utility method for getting components dependants
+		string GetComponentDependants(Component component){
+			Type type = component.GetType();
+			Component[] components = component.GetComponents<Component>();
+			HashSet<string> dependants = new HashSet<string>();
+			bool hasBuiltInDependants = componentDependencies.Keys.Contains(type);
+			for (int i = 1; i < components.Length; i++){
+				if (components[i] == component)
+					continue;
+				if (components[i] == null)
+					continue;
+
+				//First, check if any other built-in attached component depends on it
+				if (hasBuiltInDependants && componentDependencies[type].Contains(components[i].GetType()))
+					dependants.Add(components[i].GetType().Name);
+
+				//Then, find [RequireComponent] Attributes
+				RequireComponent[] attribute = (RequireComponent[])components[i].GetType().GetCustomAttributes(typeof(RequireComponent), true);
+				if (attribute.Length == 0)
+					continue;
+				if (type.IsAssignableFrom(attribute[0].m_Type0) || (attribute[0].m_Type1 != null && type.IsAssignableFrom(attribute[0].m_Type1)) || (attribute[0].m_Type2 != null && type.IsAssignableFrom(attribute[0].m_Type2)))
+					dependants.Add(components[i].GetType().Name);
+			}
+
+			//And convert to string for better display 
+			string text = string.Empty;
+			for (int i = 0; i < dependants.Count; i++){
+				text+=dependants.ToList()[i];
+				if (i != dependants.Count-1)
+					text+=", ";
+			}
+			return text;
+		}
+
         
+
+		[Flags]
+		enum GetTargetComponentMode{
+			None = 0,
+			IncludeTransforms = 1,
+			ExcludeDifferentTypes = 2,
+			AllowMultiComponent = 4,
+			AllowMultiGameObject = 8,
+		}
+
+
+		Component[] GetTargetComponents(Component mainTarget, GetTargetComponentMode mode){
+			List<Component> targets = new List<Component>();
+			if (mode == GetTargetComponentMode.None)
+				return targets.ToArray();
+
+			bool multiComponent = (Event.current.control || Event.current.command) && ((mode & GetTargetComponentMode.AllowMultiComponent)==GetTargetComponentMode.AllowMultiComponent);
+			bool multiGameObject = Event.current.shift && ((mode & GetTargetComponentMode.AllowMultiGameObject) == GetTargetComponentMode.AllowMultiGameObject);
+
+
+            // if (m_GameObject != mainTarget.gameObject && !multiGameObject)
+            //     return;
+
+            // "<=" made on purpose in order to include Transforms if needed
+            for (int j = 0; j <= m_Components.Count; j++){
+                Component target;
+                try{
+                    target = m_Components[j];
+                }catch{
+                    if ((mode & GetTargetComponentMode.IncludeTransforms) != GetTargetComponentMode.IncludeTransforms)
+                        break;
+                    target = m_Transform;
+                }
+
+                if (target == null)
+                    continue;
+                if (mainTarget.GetType() != target.GetType() && ((mode & GetTargetComponentMode.ExcludeDifferentTypes) == GetTargetComponentMode.ExcludeDifferentTypes))
+                    continue;
+                if (!multiComponent && mainTarget.GetType() != target.GetType())
+                    continue;
+                targets.Add(target);
+                if (!multiComponent)
+                    break;
+            }
+			
+
+			return targets.ToArray();
+		}
+
+
+
+
 
 		/****************************************
 		 * GameObjectInspector Replication
