@@ -170,12 +170,12 @@ GameObject:
   m_Component:
   - component: {fileID: 4450011825404314}
   - component: {fileID: 136788139084718194}
-  - component: {fileID: 136232148464095658}
   - component: {fileID: 54577336015235404}
-  - component: {fileID: 95130883448923190}
+  - component: {fileID: 82675142162830032}
+  - component: {fileID: 136232148464095658}
   - component: {fileID: 65023945353055280}
   - component: {fileID: 135097795515019032}
-  - component: {fileID: 82675142162830032}
+  - component: {fileID: 95130883448923190}
   m_Layer: 0
   m_Name: impling
   m_TagString: Player
