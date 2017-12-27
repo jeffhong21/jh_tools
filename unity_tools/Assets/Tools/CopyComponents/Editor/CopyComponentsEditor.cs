@@ -1,10 +1,12 @@
-﻿using System.Collections.Generic;
-using System.Reflection;
-using System;
-using UnityEngine;
+﻿using UnityEngine;
+using UnityEngine.UI;
 using UnityEditor;
 using UnityEditorInternal;
-
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 
 /// <summary>
 ///  This script will copy all components and add it to all the target objects.
@@ -13,6 +15,12 @@ using UnityEditorInternal;
 ///  - AllComponents:  Will add selected components, even if target objects has component.
 ///  - OnlyNew:  Will add selected components, but only if the target object does not have that component.
 ///  - OnlyValues:  Will copy values from selected components onto target objects components only if target has component.
+///
+///
+///
+///  v1.0   basic copy component to multiple targets.
+///  v2.0   able to reorder the components in the source object.
+///
 ///
 /// </summary>
 
@@ -25,20 +33,22 @@ namespace CopyComponents
         private enum CopyOptions { AllComponents, OnlyNew, OnlyValues };
         
 
-        private GameObject m_SourceObject;
+        private GameObject m_SrcObject;
         //  List structure of components on source object.  (bool, component)
-        private List<ComponentToCopy> m_SourceObjComponents = new List<ComponentToCopy>();
+        private List<ComponentToCopy> m_SrcComponents = new List<ComponentToCopy>();
+        //  List of componets to add and values to copy.
+        private List<ComponentToAdd> m_ComponentToAdd  = new List<ComponentToAdd>();
         //  List of all the target objects
         private List<GameObject> m_TargetObjects = new List<GameObject>();
+        //  Each targets list of components to add.
+        private Dictionary<GameObject, List<ComponentToAdd>> m_TargetComponentsToAdd = new Dictionary<GameObject, List<ComponentToAdd>>();
+        //  Reorderable list.
+        private ReorderableList m_List;
+
+
 
         private CopyOptions m_CopyOptions = CopyOptions.OnlyNew;
         private bool m_AllComponents = true;
-
-        //  List of componets to add and values to copy.
-        private List<ComponentToAdd> m_ComponentToAdd  = new List<ComponentToAdd>();
-        //  Each targets list of components to add.
-        private Dictionary<GameObject, List<ComponentToAdd>> m_TargetComponentsToAdd = new Dictionary<GameObject, List<ComponentToAdd>>();
-
 
         private bool debug = true;
 
@@ -65,52 +75,189 @@ namespace CopyComponents
 
             GUILayoutOption GUIHeight = GUILayout.Height(Screen.height - 74);
 
-            DisplaySourceObject(GUIHeight);
-            DisplayTargetObjects(GUIHeight);
+            DrawSourceObjectGUI(GUIHeight);
+            DrawTargetObjectGUI(GUIHeight);
             EditorGUILayout.EndHorizontal();
-            DisplayCopyComponentOptions();
+            DrawCopyComponentOptionGUI();
         }
 
 
-        //  -- THE LEFT SIDE
-        private void DisplaySourceObject(GUILayoutOption GUIHeight)
-        {
-            //  -- START OF OBJECT SELECTION PANEL  
-            EditorGUILayout.BeginVertical(new GUIStyle("HelpBox"), GUIHeight);
-            //  -- SOURCE GAME OBJECT TO COPY FROM
-            GUILayout.Label("Sources (Copy From): ");
-            m_SourceObject = (GameObject)EditorGUILayout.ObjectField(m_SourceObject, typeof(GameObject), true);
-
-            //  -- ALL COMPONENTS FROM GAME OBJECT
-            GUILayout.Space(8);
-            GUILayout.Label("Components To Copy: ");
 
 
-            //  -- DRAW COMPONENTS
-            EditorGUILayout.BeginVertical(new GUIStyle("HelpBox"));             //  -- LIST OF TOGGLES BEGINVERTICAL
-            //  Start BeginChangeCheck() so if All toggle is selected, all components are selected.
-            EditorGUI.BeginChangeCheck();   
+        /// ---------------------------------------------------------------------------------------------------------------
+        /// ---------------------------------------------------------------------------------------------------------------
+        /// ---------------------------------------------------------------------------------------------------------------
 
-            if (m_SourceObject != null)
-            {
-                m_AllComponents = GUILayout.Toggle(m_AllComponents, "All");
-                DisplayAllComponents(m_SourceObject, m_SourceObjComponents);
+		private void OnEnable()
+		{
 
+            if (m_SrcObject == null){
+                return;
             }
+            InitializeList();
+		}
 
-            if(EditorGUI.EndChangeCheck())
-            {
-                // if All toggle is selected, set all components to true.
-                if(m_AllComponents == true)
-                {
-                    for (int index = 0; index < m_SourceObjComponents.Count; index++)
-                    {
-                        m_SourceObjComponents[index].IsCopyComponent = true;
+
+        private void UpdateComponentList()
+        {
+            if (m_SrcObject != null){
+                //  -- Go through the source object list of components.
+                for (int index = 0; index < m_SrcObject.GetComponents<Component>().Length; index++){
+                    //  -- Check to see if list contains the component.  Otherwise it will keep on adding.
+                    Component srcComponent = m_SrcObject.GetComponents<Component>()[index];
+                    ComponentToCopy srcComponentToCopy = new ComponentToCopy(true, srcComponent);
+
+                    if (m_SrcComponents.Contains(srcComponentToCopy) == false){
+                        m_SrcComponents.Add(srcComponentToCopy);
                     }
                 }
-            }
-            EditorGUILayout.EndVertical();                                  //  -- LIST OF TOGGLES ENDVERTICAL
 
+            }
+        }
+
+
+
+        #region ReorderableList
+        //  -- Setup the lists of components.
+        private void InitializeList()
+        {
+            UpdateComponentList();
+            //  -- Create the ReorderableList
+            m_List = new ReorderableList(m_SrcComponents, typeof(ComponentToCopy), true, true, false, false);
+
+            //  Draw ReorderableList Header.
+            m_List.drawHeaderCallback = (Rect rect) => {  
+                DrawElements(rect, m_SrcComponents[0]);
+            };
+
+            //  Draw ReorderableList Element
+            m_List.drawElementCallback =  (Rect rect, int index, bool isActive, bool isFocused) => {
+                DrawElements(rect, m_SrcComponents[index]);
+            };
+
+            //  //  What happens when the lists changes.
+            // m_List.onReorderCallback = (ReorderableList list) => {
+            //     //Move Down
+            //     for (int i = 0; i < m_Components.Count; i++){
+            //         int listIndex = internalList.list.IndexOf(m_Components[i]);
+            //         int difference = listIndex - i;
+            //         if (difference>0)
+            //             for (int j = 0; j<Mathf.Abs(difference); j++)
+            //                 ComponentUtility.MoveComponentDown(m_Components[i]);
+            //     }
+            //     //Move Up
+            //     m_Components = new List<Component>(gameObject.GetComponents<Component>());
+            //     m_Components.RemoveAt(0);
+            //     for (int i = m_Components.Count-1; i >=0;i--){
+            //         int listIndex = internalList.list.IndexOf(m_Components[i]);
+            //         int difference = listIndex - i;
+            //         if (difference<0)
+            //             for (int j = 0; j<Mathf.Abs(difference); j++)
+            //                 ComponentUtility.MoveComponentUp(m_Components[i]);
+            //     }
+            // };
+
+        }
+
+
+        private void DrawElements(Rect originalRect, ComponentToCopy component)
+        {
+            Rect rect = new Rect(originalRect);
+
+            bool isRectTransform = component.Component is RectTransform;
+            bool isTransform = component.Component is Transform || isRectTransform;
+
+			if (isTransform){
+				rect.x+=14;
+				rect.y-=2;
+			}
+
+            
+            //Enable/Disable Toggle Handler
+            rect.x += 5;
+            rect.y += 2;
+            rect.width = rect.height = 20;
+            component.IsCopyComponent = EditorGUI.Toggle(rect, component.IsCopyComponent);
+
+			//  Component Icon
+            rect.x += 25;
+            
+            Texture componentIcon = EditorGUIUtility.ObjectContent(null,component.Component.GetType() ).image;
+            EditorGUI.LabelField(rect, new GUIContent(componentIcon) );
+
+
+            //  Component name.
+            rect.x += 20;
+            //rect.y = originalRect.y;
+            rect.width = originalRect.width - 30;
+            EditorGUI.LabelField(rect,component.ComponentName);
+
+        }
+
+        #endregion
+
+
+        /// ---------------------------------------------------------------------------------------------------------------
+        /// ---------------------------------------------------------------------------------------------------------------
+        /// ---------------------------------------------------------------------------------------------------------------
+
+
+
+
+
+
+        //  -- THE LEFT SIDE
+        private void DrawSourceObjectGUI(GUILayoutOption GUIHeight)
+        {
+
+            //  -- START OF OBJECT SELECTION PANEL  
+            EditorGUILayout.BeginVertical(new GUIStyle("HelpBox"), GUIHeight);
+            
+            //  -- SOURCE GAME OBJECT TO COPY FROM
+            GUILayout.Label("Sources (Copy From): ");
+            m_SrcObject = (GameObject)EditorGUILayout.ObjectField(m_SrcObject, typeof(GameObject), true);
+            //  -- ALL COMPONENTS FROM GAME OBJECT
+            GUILayout.Space(4);
+
+			GUIStyle style = new GUIStyle();
+            style.fontStyle = FontStyle.Bold;
+            style.fontSize = 12;
+            GUILayout.Label(" Components To Copy ", style);
+
+            //  -- DRAW COMPONENTS
+            EditorGUILayout.BeginVertical();    //  -- LIST OF TOGGLES BEGINVERTICAL
+            if(m_SrcObject != null){
+                if (m_List == null || m_List.list == null){
+                    try{
+                        InitializeList();
+                    }
+                    catch{
+                    }
+                }
+                else{
+                    // --  Begin Change Check.
+                    EditorGUI.BeginChangeCheck();  
+                    m_AllComponents = GUILayout.Toggle(m_AllComponents, "All");
+
+                    //  Draw Reorderable list
+                    if (m_List != null && m_List.list != null){
+                        m_List.DoLayoutList();
+                    }
+
+                    // --  End Change Check.
+                    if(EditorGUI.EndChangeCheck()){
+                        // if All toggle is selected, set all components to true.
+                        if(m_AllComponents == true){
+                            for (int index = 0; index < m_SrcComponents.Count; index++){
+                                m_SrcComponents[index].IsCopyComponent = true;
+                            }
+                        }
+                    }
+                    // --  End Change Check.
+                }
+            }
+            //  -- LIST OF TOGGLES ENDVERTICAL
+            EditorGUILayout.EndVertical();                                  
 
 
 
@@ -119,34 +266,40 @@ namespace CopyComponents
         }
 
 
+
+
+
+
+
+
+
+
+
         //  -- THE RIGHT SIDE
-        private void DisplayTargetObjects(GUILayoutOption GUIHeight)
+        private void DrawTargetObjectGUI(GUILayoutOption GUIHeight)
         {
             //  -- START OF OBJECT SELECTION PANEL  
             EditorGUILayout.BeginVertical(new GUIStyle("HelpBox"), GUIHeight);
             //  -- TARGETS TO 
             GUILayout.Label("Targets (Paste To): ");
 
-            DisplayTargetObjects();
+            DrawTargetObjectGUI();
 
 
             //  -- ALL THE BUTTONS FOR ADDING OR REMOVING OBJECTS
             int buttonGUIHeight = 24;
             EditorGUILayout.BeginHorizontal();
-            if (GUILayout.Button(" + ", new GUILayoutOption[] { GUILayout.Height(buttonGUIHeight) }))
-            {
+            if (GUILayout.Button(" + ", new GUILayoutOption[] { GUILayout.Height(buttonGUIHeight) })){
                 //Debug.Log("Add " + Selection.activeGameObject + " target objects");
                 AddTargetObjects();
             }
 
-            if (GUILayout.Button(" - ", new GUILayoutOption[] { GUILayout.Height(buttonGUIHeight) }))
-            {
+            if (GUILayout.Button(" - ", new GUILayoutOption[] { GUILayout.Height(buttonGUIHeight) })){
                 //Debug.Log("Remove " + Selection.activeGameObject + " from target objects list");
                 RemoveTargetObjects();
             }
 
-            if (GUILayout.Button("Clear Objects", new GUILayoutOption[] { GUILayout.Height(buttonGUIHeight) }))
-            {
+            if (GUILayout.Button("Clear Objects", new GUILayoutOption[] { GUILayout.Height(buttonGUIHeight) })){
                 //Debug.Log("Clear All Objects");
                 ClearTargetObjects();
             }
@@ -157,15 +310,15 @@ namespace CopyComponents
             EditorGUILayout.EndVertical();
         }
 
+
         //  -- THE BUTTONS
-        private void DisplayCopyComponentOptions()
+        private void DrawCopyComponentOptionGUI()
         {
             EditorGUILayout.BeginVertical();
 
             m_CopyOptions = (CopyOptions)EditorGUILayout.EnumPopup(new GUIContent("Copy Options: "), m_CopyOptions);
 
-            if(debug)
-            {
+            if(debug){
                 EditorGUILayout.BeginHorizontal();
 
                 if (GUILayout.Button("Copy Components", GUILayout.Height(24))){
@@ -187,47 +340,15 @@ namespace CopyComponents
         }
 
 
-        private void UpdateComponentList()
-        {
-            if (m_SourceObject != null)
-            {
-                //  -- Go through the source object list of components.
-                for (int index = 0; index < m_SourceObject.GetComponents<Component>().Length; index++)
-                {
-                    //  -- Check to see if list contains the component.  Otherwise it will keep on adding.
-                    Component srcComponent = m_SourceObject.GetComponents<Component>()[index];
-                    ComponentToCopy srcComponentToCopy = new ComponentToCopy(true, srcComponent);
-
-                    if (m_SourceObjComponents.Contains(srcComponentToCopy) == false)
-                    {
-                        m_SourceObjComponents.Add(srcComponentToCopy);
-                    }
-
-                }
-                // Repaint();
-            }
-        }
 
 
-        // Displays the all components of the source game object
-        private void DisplayAllComponents(GameObject srcObject, List<ComponentToCopy> componentsToCopy)
-        {
-            UpdateComponentList();
 
-            for (int index = 0; index < srcObject.GetComponents<Component>().Length; index++)
-            {
-                string componentName = componentsToCopy[index].ComponentName;
-                // bool isCopy = GUILayout.Toggle(componentsToCopy[index].IsCopyComponent, componentName);
-                componentsToCopy[index].IsCopyComponent = GUILayout.Toggle(componentsToCopy[index].IsCopyComponent, componentName);
-            }
-        }
 
 
         // Displays the all the target objects ObjectField UI
-        private void DisplayTargetObjects()
+        private void DrawTargetObjectGUI()
         {
-            for (int i = 0; i < m_TargetObjects.Count; i++)
-            {
+            for (int i = 0; i < m_TargetObjects.Count; i++){
                 m_TargetObjects[i] = (GameObject)EditorGUILayout.ObjectField(m_TargetObjects[i], typeof(GameObject), true);
             }
         }
@@ -235,10 +356,8 @@ namespace CopyComponents
 
         private void AddTargetObjects()
         {
-            for (int i = 0; i < Selection.gameObjects.Length; i++)
-            {
-                if (!m_TargetObjects.Contains(Selection.gameObjects[i]))
-                {
+            for (int i = 0; i < Selection.gameObjects.Length; i++){
+                if (!m_TargetObjects.Contains(Selection.gameObjects[i])){
                     m_TargetObjects.Add(Selection.gameObjects[i]);
                 }
             }
@@ -267,7 +386,6 @@ namespace CopyComponents
                     m_TargetObjects.RemoveAt(m_TargetObjects.Count - 1);
                 }
             }
-
             Repaint();
         }
 
@@ -284,7 +402,7 @@ namespace CopyComponents
         private void CopyComponentsToTarget()
         {
             //  Add all checked components into a new list and get their values.
-            m_ComponentToAdd = GetAllComponentsToCopy(m_SourceObject, m_SourceObjComponents);
+            m_ComponentToAdd = GetAllComponentsToCopy(m_SrcObject, m_SrcComponents);
             //  Get List of targets and the components to add to each target.
             m_TargetComponentsToAdd = GetListOfComponentsToCopyForTarget(m_TargetObjects, m_ComponentToAdd);
 
@@ -479,10 +597,10 @@ namespace CopyComponents
         private void DebugMessage()
         {
 
-            // Debug.Log("Source Components: " + m_SourceObjComponents.Count);
+            // Debug.Log("Source Components: " + m_SrcComponents.Count);
             // Debug.Log("Components To Add: " + m_ComponentToAdd.Count);
 
-            foreach(ComponentToAdd c in GetAllComponentsToCopy(m_SourceObject, m_SourceObjComponents) ){
+            foreach(ComponentToAdd c in GetAllComponentsToCopy(m_SrcObject, m_SrcComponents) ){
                 Debug.Log(c.ComponentName);
             }
         }
